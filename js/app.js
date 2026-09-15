@@ -239,10 +239,74 @@ function clearByteBlocksHighlight() {
   }
 }
 
-// Logger
-function logEvent(type, text, details = "", detectionLayer = "") {
+// Logger & Alarm Management
+function recordAlarm({ attackName, reason, layer = "Rule-based", severity = "MEDIUM", sourceIp = "192.168.1.99" }) {
+  state.alarmCount++;
+  const counterEl = document.getElementById('alarm-counter');
+  if (counterEl) counterEl.innerText = state.alarmCount;
+
   const timestamp = new Date().toLocaleTimeString();
-  state.logs.push({ timestamp, type, text, details, detectionLayer });
+  state.logs.push({
+    timestamp,
+    type: 'anomaly',
+    attackName,
+    text: reason,
+    details: `Source IP: ${sourceIp} | Detection: ${layer} | Severity: ${severity}`,
+    detectionLayer: layer,
+    severity,
+    sourceIp
+  });
+
+  if (state.logs.length > 100) state.logs.shift();
+  renderLogs();
+}
+
+function revealRogueNode(durationMs = 14000) {
+  state.attacker.visible = true;
+  state.attacker.visibleUntil = Date.now() + durationMs;
+}
+
+function toggleQuarantine(ip) {
+  if (!ip) return;
+  if (state.quarantinedNodes[ip]) {
+    delete state.quarantinedNodes[ip];
+    logEvent('info', `Source ${ip} connection restored to network segment.`);
+  } else {
+    state.quarantinedNodes[ip] = true;
+    if (ip === state.attacker.ip) {
+      state.attacker.visible = true;
+    }
+    logEvent('info', `Source ${ip} isolated from network segment.`);
+  }
+  updateRestoreAllButton();
+  renderLogs();
+}
+
+function restoreAllQuarantine() {
+  const ips = Object.keys(state.quarantinedNodes);
+  state.quarantinedNodes = {};
+  ips.forEach(ip => {
+    logEvent('info', `Source ${ip} connection restored to network segment.`);
+  });
+  updateRestoreAllButton();
+  renderLogs();
+}
+
+function updateRestoreAllButton() {
+  const btn = document.getElementById('restore-all-btn');
+  if (!btn) return;
+  const count = Object.keys(state.quarantinedNodes).length;
+  if (count > 0) {
+    btn.classList.remove('hidden');
+    btn.innerText = `↺ Restore (${count}) Isolated`;
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
+function logEvent(type, text, details = "", detectionLayer = "", severity = "") {
+  const timestamp = new Date().toLocaleTimeString();
+  state.logs.push({ timestamp, type, text, details, detectionLayer, severity });
   
   if (state.logs.length > 100) state.logs.shift();
   renderLogs();
@@ -282,14 +346,14 @@ function renderLogs() {
     } else if (log.type === 'anomaly') {
       colorClass = "text-rose-500 font-bold";
       prefix = "🚨 [ALARM]";
-      line.className = "mb-1.5 flex flex-col md:flex-row md:items-start border-l-2 pl-2 border-rose-500 py-0.5 bg-rose-950/20";
+      line.className = "mb-1.5 flex flex-col md:flex-row md:items-start border-l-2 pl-2 border-rose-500 py-1 bg-rose-950/25 rounded-r shadow-sm";
     } else if (log.type === 'exception') {
       colorClass = "text-amber-500";
       prefix = "⚠ [FAULT]";
       line.className = "mb-1.5 flex flex-col md:flex-row md:items-start border-l-2 pl-2 border-amber-500 py-0.5 bg-amber-950/10";
     }
 
-    let badgeHtml = "";
+    let badgesHtml = "";
     if (log.detectionLayer) {
       let badgeColor = "";
       if (log.detectionLayer === 'Rule-based') {
@@ -299,16 +363,44 @@ function renderLogs() {
       } else if (log.detectionLayer === 'Protocol-state (FSM)') {
         badgeColor = "bg-blue-950/60 text-blue-400 border border-blue-800/50";
       }
-      badgeHtml = `<span class="ml-2 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${badgeColor} border">${log.detectionLayer}</span>`;
+      badgesHtml += `<span class="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${badgeColor} border">${log.detectionLayer}</span>`;
+    }
+
+    if (log.severity) {
+      let sevColor = "";
+      if (log.severity === 'CRITICAL') {
+        sevColor = "bg-rose-950 text-rose-300 border border-rose-600";
+      } else if (log.severity === 'HIGH') {
+        sevColor = "bg-orange-950 text-orange-300 border border-orange-600";
+      } else if (log.severity === 'MEDIUM') {
+        sevColor = "bg-amber-950 text-amber-300 border border-amber-600";
+      } else {
+        sevColor = "bg-yellow-950 text-yellow-300 border border-yellow-600";
+      }
+      badgesHtml += `<span class="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${sevColor} border">${log.severity}</span>`;
+    }
+
+    let actionHtml = "";
+    if (log.type === 'anomaly' && log.sourceIp) {
+      const isIso = !!state.quarantinedNodes[log.sourceIp];
+      if (isIso) {
+        actionHtml = `<button onclick="toggleQuarantine('${log.sourceIp}')" class="shrink-0 text-[8px] font-mono px-2 py-0.5 rounded bg-amber-950 hover:bg-amber-900 text-amber-300 border border-amber-600 transition flex items-center gap-1 font-bold shadow-sm">↺ Restore Connection</button>`;
+      } else {
+        actionHtml = `<button onclick="toggleQuarantine('${log.sourceIp}')" class="shrink-0 text-[8px] font-mono px-2 py-0.5 rounded bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-600 transition flex items-center gap-1 font-bold shadow-sm">🛡 Quarantine Source</button>`;
+      }
     }
 
     line.innerHTML = `
       <span class="text-slate-500 shrink-0 select-none mr-2">${log.timestamp}</span>
       <span class="${colorClass} shrink-0 select-none mr-2">${prefix}</span>
-      <div class="flex-1">
-        <div class="flex items-center flex-wrap gap-1">
-          <span class="text-slate-300 font-medium">${log.text}</span>
-          ${badgeHtml}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center flex-wrap gap-1.5 justify-between">
+          <div class="flex items-center flex-wrap gap-1.5">
+            ${log.attackName ? `<span class="text-rose-300 font-bold">${log.attackName}:</span>` : ""}
+            <span class="text-slate-300 font-medium">${log.text}</span>
+            ${badgesHtml}
+          </div>
+          ${actionHtml}
         </div>
         ${log.details ? `<span class="block text-[10px] text-slate-500 mt-0.5">${log.details}</span>` : ""}
       </div>
@@ -319,7 +411,7 @@ function renderLogs() {
   container.scrollTop = container.scrollHeight;
 }
 
-// Render Slave registers
+// Render Slave registers with Baseline comparison (Feature 5)
 function renderRegisters() {
   for (let sId = 1; sId <= 3; sId++) {
     const container = document.getElementById(`slave-${sId}-regs`);
@@ -340,11 +432,36 @@ function renderRegisters() {
         flashClass = "bg-rose-950/80 text-rose-400 border border-rose-800 font-bold rounded px-1 -mx-1 animate-pulse";
       }
       
-      div.className = `flex justify-between items-center transition-all duration-300 py-0.5 ${flashClass}`;
+      const hasBaseline = !!reg.baseline;
+      const isOutOfRange = hasBaseline && (reg.val < reg.baseline.min || reg.val > reg.baseline.max);
+      
+      let valDisplayHtml = "";
+      if (isOutOfRange) {
+        valDisplayHtml = `
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-[7.5px] text-rose-400/80 font-mono hidden sm:inline" title="Baseline: ${reg.baseline.label}">[${reg.baseline.label}]</span>
+            <span class="font-bold text-rose-300 bg-rose-950 px-1 py-0.2 rounded border border-rose-600 flex items-center gap-1 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.4)]">
+              ${reg.val}
+              <span class="text-[6.5px] bg-rose-600 text-white font-extrabold px-0.5 py-0.2 rounded uppercase">OUT OF RANGE</span>
+            </span>
+          </div>
+        `;
+      } else if (hasBaseline) {
+        valDisplayHtml = `
+          <div class="flex items-center gap-1 shrink-0">
+            <span class="text-[7.5px] text-slate-500 font-mono hidden sm:inline" title="Baseline: ${reg.baseline.label}">[${reg.baseline.label}]</span>
+            <span class="font-bold">${reg.val}</span>
+          </div>
+        `;
+      } else {
+        valDisplayHtml = `<span class="font-bold shrink-0">${reg.val}</span>`;
+      }
+      
+      div.className = `flex justify-between items-center transition-all duration-300 py-0.5 ${flashClass} ${isOutOfRange ? 'bg-rose-950/20' : ''}`;
       div.innerHTML = `
         <span class="opacity-85 text-[9px]" title="${reg.name}">${rAddr}</span>
-        <span class="text-[9px] opacity-60 overflow-hidden text-ellipsis whitespace-nowrap max-w-[50px]">${reg.name}</span>
-        <span class="font-bold shrink-0">${reg.val}</span>
+        <span class="text-[9px] opacity-60 overflow-hidden text-ellipsis whitespace-nowrap max-w-[48px]" title="${reg.name}">${reg.name}</span>
+        ${valDisplayHtml}
       `;
       container.appendChild(div);
     }
@@ -382,48 +499,80 @@ function drawTopology() {
   // Draw Main Wires
   ctx.lineWidth = 4;
   ctx.lineCap = "round";
-  ctx.shadowBlur = 0;
-  
-  // Wire: Master to Switch
-  ctx.strokeStyle = "rgba(15, 23, 42, 0.8)";
+  ctx.s  // Wire: Master to Switch
+  ctx.save();
+  if (state.quarantinedNodes[m.ip]) {
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.6)";
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([5, 5]);
+  } else {
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.8)";
+    ctx.lineWidth = 4;
+  }
   ctx.beginPath();
   ctx.moveTo(m.x, m.y);
   ctx.lineTo(sw.x, sw.y);
   ctx.stroke();
-  ctx.strokeStyle = "#1e293b";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Wire: Attacker to Switch (Rogue Node)
-  ctx.save();
-  if (atk.state === "ACTIVE") {
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.8)";
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([4, 4]);
-    ctx.lineDashOffset = -Math.floor(Date.now() / 40) % 80;
-  } else {
-    ctx.strokeStyle = "rgba(100, 116, 139, 0.15)";
-    ctx.lineWidth = 1.5;
-  }
-  ctx.beginPath();
-  ctx.moveTo(atk.x, atk.y);
-  ctx.lineTo(sw.x, sw.y);
-  ctx.stroke();
-  ctx.restore();
-
-  // Wires: Switch to Slaves
-  ctx.lineWidth = 4;
-  for (let sId = 1; sId <= 3; sId++) {
-    const sl = state.slaves[sId];
-    ctx.strokeStyle = "rgba(15, 23, 42, 0.8)";
-    ctx.beginPath();
-    ctx.moveTo(sw.x, sw.y);
-    ctx.lineTo(sl.x, sl.y);
-    ctx.stroke();
-    
+  if (!state.quarantinedNodes[m.ip]) {
     ctx.strokeStyle = "#1e293b";
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
+  ctx.restore();
+
+  // Wire: Attacker to Switch (Rogue Node) - only visible when revealed or quarantined (Feature 6 & 4)
+  if (atk.visibilityAlpha > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = atk.visibilityAlpha;
+    const slideX = (1.0 - atk.visibilityAlpha) * -30;
+    const atkWX = atk.x + slideX;
+    
+    ctx.beginPath();
+    ctx.moveTo(atkWX, atk.y);
+    ctx.lineTo(sw.x, sw.y);
+    
+    if (state.quarantinedNodes[atk.ip]) {
+      ctx.strokeStyle = "rgba(100, 116, 139, 0.8)";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 5]);
+    } else if (atk.state === "ACTIVE") {
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.85)";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([4, 4]);
+      ctx.lineDashOffset = -Math.floor(Date.now() / 40) % 80;
+    } else {
+      ctx.strokeStyle = "rgba(100, 116, 139, 0.25)";
+      ctx.lineWidth = 1.5;
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Wires: Switch to Slaves
+  for (let sId = 1; sId <= 3; sId++) {
+    const sl = state.slaves[sId];
+    ctx.save();
+    if (state.quarantinedNodes[sl.ip]) {
+      ctx.strokeStyle = "rgba(100, 116, 139, 0.6)";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(sw.x, sw.y);
+      ctx.lineTo(sl.x, sl.y);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.8)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(sw.x, sw.y);
+      ctx.lineTo(sl.x, sl.y);
+      ctx.stroke();
+      
+      ctx.strokeStyle = "#1e293b";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // Draw Switch Node
@@ -469,16 +618,17 @@ function drawTopology() {
   ctx.fillText("ETHERNET SWITCH", sw.x, sw.y - 24);
 
   // Draw Master Node HMI
-  drawDeviceNode(m.x, m.y, "HMI Master", m.ip, m.state, true);
+  drawDeviceNode(m.x, m.y, "HMI Master", m.ip, m.state, true, 0, false, !!state.quarantinedNodes[m.ip]);
 
-  // Draw Attacker Rogue Node
-  if (atk.state === "ACTIVE" || atk.pulseTimer > 0) {
-    drawDeviceNode(atk.x, atk.y, "Rogue Node", atk.ip, "ATTACK", false, 0, true);
-    if (atk.pulseTimer > 0) atk.pulseTimer -= 0.016;
-  } else {
+  // Draw Attacker Rogue Node (Feature 6 & 4)
+  if (atk.visibilityAlpha > 0.01) {
     ctx.save();
-    ctx.globalAlpha = 0.35;
-    drawDeviceNode(atk.x, atk.y, "Rogue Node", atk.ip, "INACTIVE", false, 0, true);
+    ctx.globalAlpha = atk.visibilityAlpha;
+    const slideX = (1.0 - atk.visibilityAlpha) * -30;
+    const isIso = !!state.quarantinedNodes[atk.ip];
+    const devState = isIso ? 'ISOLATED' : (atk.state === "ACTIVE" || atk.pulseTimer > 0 ? "ATTACK" : "INACTIVE");
+    drawDeviceNode(atk.x + slideX, atk.y, "Rogue Node", atk.ip, devState, false, 0, true, isIso);
+    if (atk.pulseTimer > 0) atk.pulseTimer -= 0.016;
     ctx.restore();
   }
 
@@ -492,7 +642,7 @@ function drawTopology() {
       sl.shakeTimer -= 0.016;
     }
     
-    drawDeviceNode(sl.x + shakeOffset.x, sl.y + shakeOffset.y, sl.name, sl.ip, sl.state, false, sl.id);
+    drawDeviceNode(sl.x + shakeOffset.x, sl.y + shakeOffset.y, sl.name, sl.ip, sl.state, false, sl.id, false, !!state.quarantinedNodes[sl.ip]);
     
     if (sl.queueFullIndicator) {
       ctx.font = "bold 8px 'Fira Code'";
@@ -542,7 +692,7 @@ function drawTopology() {
         if (p.progress <= 0.6) {
           const t = p.progress / 0.6;
           currentPos.x = sl.x + (sw.x - sl.x) * t;
-          currentPos.y = sw.y + (sl.y - sw.y) * t;
+          currentPos.y = sl.y + (sw.y - sl.y) * t;
         } else {
           const t = (p.progress - 0.6) / 0.4;
           currentPos.x = sw.x + (destNode.x - sw.x) * t;
@@ -591,11 +741,12 @@ function drawTopology() {
   }
 }
 
-function drawDeviceNode(x, y, label, ip, deviceState, isMaster, unitId = 0, isAttacker = false) {
+function drawDeviceNode(x, y, label, ip, deviceState, isMaster, unitId = 0, isAttacker = false, isQuarantined = false) {
   ctx.fillStyle = "#0f172a";
   
   let strokeColor = "#334155";
-  if (deviceState === 'ALARM' || deviceState === 'ATTACK') strokeColor = "#ef4444";
+  if (isQuarantined) strokeColor = "#ef4444";
+  else if (deviceState === 'ALARM' || deviceState === 'ATTACK') strokeColor = "#ef4444";
   else if (deviceState === 'BUSY') strokeColor = "#f59e0b";
   else if (isAttacker) strokeColor = "#dc2626";
   
@@ -603,7 +754,9 @@ function drawDeviceNode(x, y, label, ip, deviceState, isMaster, unitId = 0, isAt
   ctx.lineWidth = 2;
   
   ctx.save();
-  if (isAttacker) {
+  if (isQuarantined) {
+    ctx.setLineDash([4, 4]);
+  } else if (isAttacker) {
     ctx.setLineDash([3, 3]);
   }
   if (deviceState === 'ALARM' || deviceState === 'ATTACK') {
@@ -634,7 +787,21 @@ function drawDeviceNode(x, y, label, ip, deviceState, isMaster, unitId = 0, isAt
   ctx.fillStyle = isAttacker ? "#f87171" : "#94a3b8";
   ctx.fillText(ip, x + 8, y + 4);
 
-  if (!isMaster && !isAttacker) {
+  if (isQuarantined) {
+    ctx.save();
+    ctx.fillStyle = "#450a0a";
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x - 22, y + 8, 56, 13, 3);
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = "bold 7.5px 'Fira Code'";
+    ctx.fillStyle = "#fca5a5";
+    ctx.textAlign = "center";
+    ctx.fillText("ISOLATED", x + 6, y + 17.5);
+    ctx.restore();
+  } else if (!isMaster && !isAttacker) {
     ctx.font = "bold 8px 'Fira Code'";
     ctx.fillStyle = "#2dd4bf";
     ctx.fillText(`UNIT ID: ${toHex8(unitId)}`, x + 8, y + 14);
@@ -647,7 +814,12 @@ function drawDeviceNode(x, y, label, ip, deviceState, isMaster, unitId = 0, isAt
   // Status LED circle
   ctx.beginPath();
   ctx.arc(x - 34, y - 15, 3.5, 0, Math.PI * 2);
-  if (deviceState === 'ALARM' || deviceState === 'ATTACK') {
+  if (isQuarantined) {
+    ctx.fillStyle = "#64748b"; // grey/red
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  } else if (deviceState === 'ALARM' || deviceState === 'ATTACK') {
     ctx.fillStyle = "#ef4444";
     ctx.strokeStyle = "rgba(239, 68, 68, 0.4)";
     ctx.lineWidth = 2;
@@ -697,6 +869,15 @@ function drawNodeAlert(x, y, msg) {
 
 // Animation Tick Loop
 function tick(timestamp) {
+  // Smoothly update Rogue Node visibility (Feature 6)
+  const atk = state.attacker;
+  const isAtkVisible = atk.state === "ACTIVE" || !!state.quarantinedNodes[atk.ip] || (atk.visibleUntil && Date.now() < atk.visibleUntil);
+  if (isAtkVisible) {
+    atk.visibilityAlpha = Math.min(1.0, (atk.visibilityAlpha || 0) + 0.08);
+  } else {
+    atk.visibilityAlpha = Math.max(0.0, (atk.visibilityAlpha || 0) - 0.03);
+  }
+
   let finishedPackets = [];
   
   state.packets.forEach((p) => {
@@ -883,9 +1064,16 @@ function handleSlaveRequestArrival(reqConfig, requestFrame) {
   }
 
   if (requestFrame.isAnomaly) {
-    state.alarmCount++;
-    const alarmEl = document.getElementById('alarm-counter');
-    if (alarmEl) alarmEl.innerText = state.alarmCount;
+    if (!reqConfig._alarmRecorded) {
+      recordAlarm({
+        attackName: reqConfig.attackName || "Security Anomaly",
+        reason: requestFrame.anomalyText || "Unauthorized Modbus activity detected.",
+        layer: reqConfig.detectionLayer || "Rule-based",
+        severity: reqConfig.severity || "MEDIUM",
+        sourceIp: requestFrame.srcIp
+      });
+      reqConfig._alarmRecorded = true;
+    }
     
     slave.state = 'ALARM';
     slave.alertMsg = requestFrame.anomalyText;

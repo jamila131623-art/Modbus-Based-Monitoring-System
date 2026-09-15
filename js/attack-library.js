@@ -65,11 +65,105 @@ function showAttackDetails(id) {
   `;
 }
 
-// Trigger on-demand anomaly templates
+// ----------------------------------------------------
+// DIRECT ATTACK INJECTIONS (Audit Buttons - Feature 2 & 3)
+// ----------------------------------------------------
+function triggerDirectAttack(type) {
+  const wasPolling = state.isPolling;
+  if (wasPolling) togglePolling();
+
+  state.attacker.state = "ACTIVE";
+  if (typeof revealRogueNode === 'function') {
+    revealRogueNode(14000);
+  }
+
+  let attackName = "";
+  let reason = "";
+  let layer = "Rule-based";
+  let severity = "MEDIUM";
+  let config = {
+    txId: state.nextTransactionId++,
+    isAnomaly: true,
+    customSrcIp: state.attacker.ip,
+    _alarmRecorded: true
+  };
+
+  if (type === 'safety') {
+    attackName = "Critical Write Bypass";
+    reason = "Unauthorized write to register 40004 attempting to disable physical ESD safety interlock.";
+    layer = "Rule-based";
+    severity = "CRITICAL";
+    config.unitId = 1;
+    config.fc = 6;
+    config.addr = 40004;
+    config.val = 0;
+    config.anomalyText = "⚠ Critical Safety Bypass — Interlock forced to 0!";
+  } else if (type === 'range') {
+    attackName = "Motor Overdrive";
+    reason = "Motor RPM write value (9999) drastically exceeds safe operating threshold (1600 RPM).";
+    layer = "Rule-based";
+    severity = "HIGH";
+    config.unitId = 2;
+    config.fc = 6;
+    config.addr = 40002;
+    config.val = 9999;
+    config.anomalyText = "⚠ Motor Overdrive — RPM parameter exceeded baseline!";
+  } else if (type === 'func') {
+    attackName = "Illegal Func Code";
+    reason = "Modbus frame transmitted with invalid/unsupported function code 0x99.";
+    layer = "Rule-based";
+    severity = "MEDIUM";
+    config.unitId = 3;
+    config.fc = 0x99;
+    config.anomalyText = "⚠ Illegal Function Code 0x99 rejected by PLC.";
+  } else if (type === 'ip') {
+    attackName = "Rogue IP Read";
+    reason = "Unauthorized source IP (192.168.1.99) attempting to query internal PLC registers.";
+    layer = "Rule-based";
+    severity = "MEDIUM";
+    config.unitId = 1;
+    config.fc = 3;
+    config.addr = 40001;
+    config.qty = 8;
+    config.anomalyText = "⚠ Firewall Breach: Unauthorized IP source querying registers.";
+  }
+
+  config.detectionLayer = layer;
+  config.attackName = attackName;
+  config.severity = severity;
+
+  // Feature 2, 3, 4: Record Alarm once reliably
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName,
+      reason,
+      layer,
+      severity,
+      sourceIp: state.attacker.ip
+    });
+  }
+
+  dispatchRequest(config);
+
+  setTimeout(() => {
+    state.attacker.state = "INACTIVE";
+    if (wasPolling) togglePolling();
+  }, 4000);
+}
+
+// Trigger on-demand anomaly templates (e.g. from Auto Anomaly)
 function triggerAttackPayload(type, baseConfig) {
-  let config = { ...baseConfig, isAnomaly: true };
+  let config = { ...baseConfig, isAnomaly: true, _alarmRecorded: true };
+  let attackName = "";
+  let reason = "";
+  let layer = "Rule-based";
+  let severity = "MEDIUM";
+  let srcIp = "10.0.0.10";
   
   if (type === 'safety') {
+    attackName = "Critical Write Bypass";
+    reason = "Unauthorized write attempting to disable physical ESD safety interlock.";
+    severity = "CRITICAL";
     config.unitId = 1;
     config.fc = 6;
     config.addr = 40004;
@@ -78,6 +172,9 @@ function triggerAttackPayload(type, baseConfig) {
     config.detectionLayer = "Rule-based";
   } 
   else if (type === 'range') {
+    attackName = "Motor Overdrive";
+    reason = "Motor RPM write value exceeds safe operating threshold.";
+    severity = "HIGH";
     config.unitId = 2;
     config.fc = 6;
     config.addr = 40002;
@@ -86,12 +183,19 @@ function triggerAttackPayload(type, baseConfig) {
     config.detectionLayer = "Rule-based";
   } 
   else if (type === 'func') {
+    attackName = "Illegal Func Code";
+    reason = "Modbus frame transmitted with invalid/unsupported function code 0x99.";
+    severity = "MEDIUM";
     config.unitId = 3;
     config.fc = 0x99;
     config.anomalyText = "⚠ Illegal function code — not in expected command set.";
     config.detectionLayer = "Rule-based";
   } 
   else if (type === 'ip') {
+    attackName = "Rogue IP Read";
+    reason = "Unauthorized source IP (192.168.1.99) attempting to query internal PLC registers.";
+    severity = "MEDIUM";
+    srcIp = "192.168.1.99";
     config.unitId = 1;
     config.fc = 3;
     config.addr = 40001;
@@ -99,6 +203,19 @@ function triggerAttackPayload(type, baseConfig) {
     config.customSrcIp = "192.168.1.99";
     config.anomalyText = "⚠ Firewall Breach: Unauthorized IP source querying registers.";
     config.detectionLayer = "Rule-based";
+    if (typeof revealRogueNode === 'function') {
+      revealRogueNode(14000);
+    }
+  }
+
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName,
+      reason,
+      layer,
+      severity,
+      sourceIp: srcIp
+    });
   }
 
   dispatchRequest(config);
@@ -108,11 +225,22 @@ function triggerAttackPayload(type, baseConfig) {
 // ADVANCED ATTACK SCENARIO LIBRARY HANDLERS
 // ----------------------------------------------------
 
-// Scenario 1: Unauthorized Write / FC Misuse
+// Scenario 1: Critical Parameter Manipulation
 function launchAttackScenario1() {
   state.attacker.state = "ACTIVE";
+  if (typeof revealRogueNode === 'function') revealRogueNode(14000);
   const wasPolling = state.isPolling;
   if (wasPolling) togglePolling();
+
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName: "Critical Parameter Manipulation",
+      reason: "Unauthorized write targeting safety interlock register 40004 on Slave 1.",
+      layer: "Rule-based",
+      severity: "CRITICAL",
+      sourceIp: state.attacker.ip
+    });
+  }
 
   const config = {
     txId: state.nextTransactionId++,
@@ -123,7 +251,8 @@ function launchAttackScenario1() {
     isAnomaly: true,
     anomalyText: "⚠ Unauthorized write — register outside baseline range.",
     customSrcIp: state.attacker.ip,
-    detectionLayer: "Rule-based"
+    detectionLayer: "Rule-based",
+    _alarmRecorded: true
   };
 
   dispatchRequest(config);
@@ -134,11 +263,22 @@ function launchAttackScenario1() {
   }, 4000);
 }
 
-// Scenario 2: Illegal / Reserved Function Code
+// Scenario 2: Illegal / Reserved Function Code Injection
 function launchAttackScenario2() {
   state.attacker.state = "ACTIVE";
+  if (typeof revealRogueNode === 'function') revealRogueNode(14000);
   const wasPolling = state.isPolling;
   if (wasPolling) togglePolling();
+
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName: "Illegal Function Code Injection",
+      reason: "Packet sent with reserved function code 0x99 attempting scanner mapping.",
+      layer: "Rule-based",
+      severity: "MEDIUM",
+      sourceIp: state.attacker.ip
+    });
+  }
 
   const config = {
     txId: state.nextTransactionId++,
@@ -147,7 +287,8 @@ function launchAttackScenario2() {
     isAnomaly: true,
     anomalyText: "⚠ Illegal function code — not in expected command set.",
     customSrcIp: state.attacker.ip,
-    detectionLayer: "Rule-based"
+    detectionLayer: "Rule-based",
+    _alarmRecorded: true
   };
 
   dispatchRequest(config);
@@ -158,7 +299,7 @@ function launchAttackScenario2() {
   }, 4000);
 }
 
-// Scenario 3: Replay Attack
+// Scenario 3: Out-of-Sequence Replay Attack (Feature 1 FSM Violation)
 function launchAttackScenario3() {
   const wasPolling = state.isPolling;
   if (wasPolling) togglePolling();
@@ -179,9 +320,20 @@ function launchAttackScenario3() {
   // Step 2: Replay same transaction out of order from Attacker Node
   setTimeout(() => {
     state.attacker.state = "ACTIVE";
+    if (typeof revealRogueNode === 'function') revealRogueNode(14000);
     
-    // Trigger FSM violation visual strip alert immediately on packet release
-    updateFsm('sent', "FSM ALERT: Replayed Transaction! Duplicate TxID 200 in Completed State.");
+    // Feature 1: Trigger FSM protocol state machine sequence violation!
+    updateFsm('done', "Duplicate TxID 200 replayed out-of-sequence with no active request context.", true);
+
+    if (typeof recordAlarm === 'function') {
+      recordAlarm({
+        attackName: "Out-of-Sequence Replay Attack",
+        reason: "Duplicate Transaction ID 200 replayed out-of-sequence with no active request state.",
+        layer: "Protocol-state (FSM)",
+        severity: "HIGH",
+        sourceIp: state.attacker.ip
+      });
+    }
 
     const replayConfig = {
       txId: 200, // Replayed TxID!
@@ -192,7 +344,8 @@ function launchAttackScenario3() {
       isAnomaly: true,
       anomalyText: "⚠ Replayed transaction — duplicate/stale Transaction ID or out-of-sequence write.",
       customSrcIp: state.attacker.ip,
-      detectionLayer: "Protocol-state (FSM)"
+      detectionLayer: "Protocol-state (FSM)",
+      _alarmRecorded: true
     };
 
     dispatchRequest(replayConfig);
@@ -209,11 +362,21 @@ function launchAttackScenario3() {
 // Scenario 4: Denial-of-Service (DoS) / Flooding
 function launchAttackScenario4() {
   state.attacker.state = "ACTIVE";
+  if (typeof revealRogueNode === 'function') revealRogueNode(14000);
   const wasPolling = state.isPolling;
   if (wasPolling) togglePolling();
 
   const target = state.slaves[2]; // Target Motor PLC
-  logEvent('anomaly', "IDS ALERT: Abnormal request rate threshold breached. Analyzing request frequency...", "", "ML-based");
+
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName: "Denial of Service (DoS) Flood",
+      reason: "Abnormal request frequency burst (18 packets in 2s) overloading PLC queue buffer.",
+      layer: "ML-based",
+      severity: "HIGH",
+      sourceIp: state.attacker.ip
+    });
+  }
 
   let burstCount = 18;
   let sentCount = 0;
@@ -237,7 +400,8 @@ function launchAttackScenario4() {
       isAnomaly: true,
       anomalyText: "⚠ Abnormal request rate — exceeds baseline polling frequency.",
       customSrcIp: state.attacker.ip,
-      detectionLayer: "ML-based"
+      detectionLayer: "ML-based",
+      _alarmRecorded: true
     };
 
     const requestFrame = createModbusFrame(config);
@@ -255,9 +419,6 @@ function launchAttackScenario4() {
       fc: config.fc,
       stepRate: 0.08 // Cascading fast animation speed
     }, () => {
-      state.alarmCount++;
-      const counterEl = document.getElementById('alarm-counter');
-      if (counterEl) counterEl.innerText = state.alarmCount;
       target.state = 'ALARM';
       target.alertMsg = config.anomalyText;
       target.alertExpiry = Date.now() + 1500;
@@ -293,8 +454,19 @@ function launchAttackScenario4() {
 // Scenario 5: Reconnaissance / Scanning (Sweep)
 function launchAttackScenario5() {
   state.attacker.state = "ACTIVE";
+  if (typeof revealRogueNode === 'function') revealRogueNode(14000);
   const wasPolling = state.isPolling;
   if (wasPolling) togglePolling();
+
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName: "Address & Unit ID Scan Sweep",
+      reason: "Consecutive rapid read sweep across register banks indicative of reconnaissance.",
+      layer: "ML-based",
+      severity: "LOW",
+      sourceIp: state.attacker.ip
+    });
+  }
 
   const sweepSteps = [
     { unitId: 1, addr: 40001 },
@@ -322,7 +494,8 @@ function launchAttackScenario5() {
       isAnomaly: true,
       anomalyText: "⚠ Address/Unit ID sweep detected — consistent with reconnaissance.",
       customSrcIp: state.attacker.ip,
-      detectionLayer: "ML-based"
+      detectionLayer: "ML-based",
+      _alarmRecorded: true
     };
 
     const requestFrame = createModbusFrame(config);
@@ -338,10 +511,6 @@ function launchAttackScenario5() {
       fc: config.fc,
       stepRate: 0.05
     }, () => {
-      state.alarmCount++;
-      const counterEl = document.getElementById('alarm-counter');
-      if (counterEl) counterEl.innerText = state.alarmCount;
-      
       const slave = state.slaves[config.unitId];
       slave.state = 'ALARM';
       slave.alertMsg = config.anomalyText;
@@ -380,14 +549,24 @@ function launchAttackScenario5() {
   }, 4500);
 }
 
-// Scenario 6: MITM / Spoofed Source
+// Scenario 6: MITM / Spoofed Source (Feature 1 FSM Violation)
 function launchAttackScenario6() {
   state.attacker.state = "ACTIVE";
   const wasPolling = state.isPolling;
   if (wasPolling) togglePolling();
 
-  // Trigger FSM Spoof alert
-  updateFsm('sent', "FSM ALERT: Out-of-Sequence Spoofed Injection detected! Spoofed Source: 10.0.0.10.");
+  // Feature 1: Trigger FSM Spoof alert with protocol violation
+  updateFsm('sent', "Out-of-Sequence Spoofed Injection detected! Spoofed Source: 10.0.0.10.", true);
+
+  if (typeof recordAlarm === 'function') {
+    recordAlarm({
+      attackName: "Spoofed Packet Injection (MITM)",
+      reason: "Injected packet spoofing Master IP 10.0.0.10 detected with conflicting transaction context.",
+      layer: "Protocol-state (FSM)",
+      severity: "HIGH",
+      sourceIp: "10.0.0.10"
+    });
+  }
 
   const config = {
     txId: 99, // Mismatched/OutOfSequence TxID
@@ -399,14 +578,11 @@ function launchAttackScenario6() {
     anomalyText: "⚠ Possible spoofed source — conflicting transaction context.",
     customSrcIp: "10.0.0.10", // Spoofing Master IP!
     detectionLayer: "Protocol-state (FSM)",
-    isMitm: true // Injects directly at switch
+    isMitm: true, // Injects directly at switch
+    _alarmRecorded: true
   };
 
   const requestFrame = createModbusFrame(config);
-  
-  logEvent('anomaly', "IDS ALERT: Spoofed packet injection on HMI interface detected. Source IP mismatch.", 
-           `TX:99 | IP:10.0.0.10 (Spoofed) | Payload:${requestFrame.rawBytes.slice(7).join(" ")}`, 
-           "Protocol-state (FSM)");
 
   sendPacket({
     type: 'req',
@@ -420,10 +596,6 @@ function launchAttackScenario6() {
     fc: config.fc,
     isMitm: true
   }, () => {
-    state.alarmCount++;
-    const counterEl = document.getElementById('alarm-counter');
-    if (counterEl) counterEl.innerText = state.alarmCount;
-
     const slave = state.slaves[config.unitId];
     slave.state = 'ALARM';
     slave.alertMsg = config.anomalyText;

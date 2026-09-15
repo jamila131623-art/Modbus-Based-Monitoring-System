@@ -21,8 +21,12 @@ const state = {
     y: 300,
     ip: "192.168.1.99",
     state: "INACTIVE", // INACTIVE, ACTIVE
-    pulseTimer: 0
+    pulseTimer: 0,
+    visible: false,
+    visibilityAlpha: 0.0,
+    visibleUntil: 0
   },
+  quarantinedNodes: {}, // ip: true
   switchNode: {
     x: 320,
     y: 200,
@@ -44,14 +48,14 @@ const state = {
       shakeTimer: 0,
       queueFullIndicator: false,
       registers: {
-        40001: { name: "Sys Status", val: 1 },       // 0=Stopped, 1=Running, 2=Faulted
-        40002: { name: "Safety Rly", val: 1 },       // 0=Tripped, 1=OK
-        40003: { name: "E-Stop Loop", val: 1 },      // 0=Bypass, 1=Armed
-        40004: { name: "Intlk Bypass", val: 1 },     // 0=Bypassed (Critical!), 1=Active/Safe
-        40005: { name: "Flame Sens", val: 0 },       // 0=Normal, 1=Alarm
-        40006: { name: "Gas Sens", val: 0 },         // 0=Normal, 1=Leak
-        40007: { name: "Vent Valve", val: 0 },       // 0=Closed, 1=Open
-        40008: { name: "ESD Tripped", val: 0 }        // 0=Safe, 1=Emergency Shutdown
+        40001: { name: "Sys Status", val: 1, baseline: { min: 0, max: 1, label: "0-1" } },
+        40002: { name: "Safety Rly", val: 1, baseline: { min: 1, max: 1, label: "1 (OK)" } },
+        40003: { name: "E-Stop Loop", val: 1, baseline: { min: 1, max: 1, label: "1 (Armed)" } },
+        40004: { name: "Intlk Bypass", val: 1, baseline: { min: 1, max: 1, label: "1 (Safe)" } }, // 0=Bypassed (Out of range!)
+        40005: { name: "Flame Sens", val: 0, baseline: { min: 0, max: 0, label: "0 (Norm)" } },
+        40006: { name: "Gas Sens", val: 0, baseline: { min: 0, max: 0, label: "0 (Norm)" } },
+        40007: { name: "Vent Valve", val: 0, baseline: { min: 0, max: 1, label: "0-1" } },
+        40008: { name: "ESD Tripped", val: 0, baseline: { min: 0, max: 0, label: "0 (Safe)" } }
       }
     },
     2: {
@@ -68,14 +72,14 @@ const state = {
       shakeTimer: 0,
       queueFullIndicator: false,
       registers: {
-        40001: { name: "Motor State", val: 1 },      // 0=Off, 1=On, 2=Fault
-        40002: { name: "Motor RPM", val: 1485 },     // Target 1500
-        40003: { name: "Current A", val: 145 },      // 14.5 Amps
-        40004: { name: "Torque Nm", val: 218 },      // 21.8 Nm
-        40005: { name: "VFD Temp C", val: 42 },
-        40006: { name: "Brg Temp C", val: 38 },
-        40007: { name: "Vibe mm/s", val: 12 },       // 1.2 mm/s
-        40008: { name: "Fan Speed", val: 80 }        // Fan percentage
+        40001: { name: "Motor State", val: 1, baseline: { min: 0, max: 1, label: "0-1" } },
+        40002: { name: "Motor RPM", val: 1485, baseline: { min: 1400, max: 1600, label: "1400-1600" } }, // Target 1500, >1600 out of range!
+        40003: { name: "Current A", val: 145, baseline: { min: 100, max: 180, label: "100-180" } },
+        40004: { name: "Torque Nm", val: 218, baseline: { min: 190, max: 245, label: "190-245" } },
+        40005: { name: "VFD Temp C", val: 42, baseline: { min: 30, max: 55, label: "30-55°C" } },
+        40006: { name: "Brg Temp C", val: 38, baseline: { min: 25, max: 50, label: "25-50°C" } },
+        40007: { name: "Vibe mm/s", val: 12, baseline: { min: 5, max: 25, label: "5-25" } },
+        40008: { name: "Fan Speed", val: 80, baseline: { min: 50, max: 100, label: "50-100%" } }
       }
     },
     3: {
@@ -92,14 +96,14 @@ const state = {
       shakeTimer: 0,
       queueFullIndicator: false,
       registers: {
-        40001: { name: "Lvl Liters", val: 2450 },    // Tank level
-        40002: { name: "Inlet Pump", val: 1 },       // 0=Off, 1=On
-        40003: { name: "Outlet Vlv", val: 0 },       // 0=Closed, 1=Open
-        40004: { name: "Water Temp", val: 24 },
-        40005: { name: "HiLvl Alarm", val: 0 },      // 0=OK, 1=Alarm
-        40006: { name: "LoLvl Alarm", val: 0 },
-        40007: { name: "FlowIn L/m", val: 120 },
-        40008: { name: "FlowOut L/m", val: 0 }
+        40001: { name: "Lvl Liters", val: 2450, baseline: { min: 1000, max: 4200, label: "1000-4200" } },
+        40002: { name: "Inlet Pump", val: 1, baseline: { min: 0, max: 1, label: "0-1" } },
+        40003: { name: "Outlet Vlv", val: 0, baseline: { min: 0, max: 1, label: "0-1" } },
+        40004: { name: "Water Temp", val: 24, baseline: { min: 15, max: 30, label: "15-30°C" } },
+        40005: { name: "HiLvl Alarm", val: 0, baseline: { min: 0, max: 0, label: "0 (OK)" } },
+        40006: { name: "LoLvl Alarm", val: 0, baseline: { min: 0, max: 0, label: "0 (OK)" } },
+        40007: { name: "FlowIn L/m", val: 120, baseline: { min: 0, max: 150, label: "0-150" } },
+        40008: { name: "FlowOut L/m", val: 0, baseline: { min: 0, max: 180, label: "0-180" } }
       }
     }
   },
@@ -125,24 +129,68 @@ function getFcName(fc) {
   return "Illegal Function Code";
 }
 
-// Dynamic FSM Strip visual updates
-function updateFsm(step, alertText = "") {
+let fsmResetTimer = null;
+
+// Dynamic FSM Strip visual updates with full violation detection support
+function updateFsm(step, alertText = "", isViolation = false) {
   const steps = ['idle', 'sent', 'await', 'done'];
+  const statusTag = document.getElementById('fsm-status-tag');
+  
+  if (isViolation) {
+    if (fsmResetTimer) clearTimeout(fsmResetTimer);
+    
+    steps.forEach(s => {
+      const el = document.getElementById(`fsm-step-${s}`);
+      if (el) {
+        if (s === step || (step === 'violation' && (s === 'done' || s === 'sent'))) {
+          el.className = "px-2 py-1 rounded border-2 border-rose-500 bg-rose-950 text-rose-300 font-bold animate-pulse shadow-[0_0_12px_rgba(244,63,94,0.6)]";
+        } else {
+          el.className = "px-2 py-1 rounded border border-slate-800 bg-slate-900/40 text-slate-600";
+        }
+      }
+    });
+
+    if (statusTag) {
+      statusTag.className = "text-[9px] font-mono text-rose-400 font-bold animate-pulse";
+      statusTag.innerText = "⚠ SEQUENCE VIOLATION";
+    }
+
+    const alertEl = document.getElementById('fsm-alert');
+    if (alertEl) {
+      alertEl.innerHTML = `
+        <div class="flex items-center gap-1.5 font-bold text-rose-300">
+          <span class="inline-block w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+          <span>⚠ Invalid transition detected:</span>
+        </div>
+        <div class="text-rose-400 mt-0.5 text-[9px]">${alertText || "Unexpected state transition outside of verified request/response sequence."}</div>
+      `;
+      alertEl.classList.remove('hidden');
+    }
+
+    // Auto reset to normal IDLE state after 4.5 seconds
+    fsmResetTimer = setTimeout(() => {
+      updateFsm('idle');
+    }, 4500);
+    return;
+  }
+
+  // Normal request/response cycle progression
   steps.forEach(s => {
     const el = document.getElementById(`fsm-step-${s}`);
     if (el) {
       if (s === step) {
-        if (alertText) {
-          el.className = "px-2 py-1 rounded border border-rose-500 bg-rose-950/80 text-rose-400 font-bold animate-pulse";
-        } else {
-          el.className = "px-2 py-1 rounded border border-cyan-400 bg-cyan-950 text-cyan-400 font-bold";
-        }
+        el.className = "px-2 py-1 rounded border border-cyan-400 bg-cyan-950 text-cyan-400 font-bold shadow-[0_0_8px_rgba(6,182,212,0.4)]";
       } else {
         el.className = "px-2 py-1 rounded border border-slate-800 bg-slate-900/60 text-slate-500";
       }
     }
   });
-  
+
+  if (statusTag) {
+    statusTag.className = "text-[9px] font-mono text-cyan-500";
+    statusTag.innerText = "Live Transaction Audit";
+  }
+
   const alertEl = document.getElementById('fsm-alert');
   if (alertEl) {
     if (alertText) {
