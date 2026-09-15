@@ -239,23 +239,32 @@ function clearByteBlocksHighlight() {
   }
 }
 
-// Logger & Alarm Management
+// Logger & Alarm Management (Deduplication + Repeat Counter)
 function recordAlarm({ attackName, reason, layer = "Rule-based", severity = "MEDIUM", sourceIp = "192.168.1.99" }) {
   state.alarmCount++;
   const counterEl = document.getElementById('alarm-counter');
   if (counterEl) counterEl.innerText = state.alarmCount;
 
   const timestamp = new Date().toLocaleTimeString();
-  state.logs.push({
-    timestamp,
-    type: 'anomaly',
-    attackName,
-    text: reason,
-    details: `Source IP: ${sourceIp} | Detection: ${layer} | Severity: ${severity}`,
-    detectionLayer: layer,
-    severity,
-    sourceIp
-  });
+  
+  // Feature 3: Deduplicate consecutive identical alarms into single row with repeat counter
+  const lastLog = state.logs.length > 0 ? state.logs[state.logs.length - 1] : null;
+  if (lastLog && lastLog.type === 'anomaly' && (lastLog.attackName === attackName || lastLog.text === reason)) {
+    lastLog.repeatCount = (lastLog.repeatCount || 1) + 1;
+    lastLog.timestamp = timestamp;
+  } else {
+    state.logs.push({
+      timestamp,
+      type: 'anomaly',
+      attackName,
+      text: reason,
+      details: `Source IP: ${sourceIp} | Detection: ${layer} | Severity: ${severity}`,
+      detectionLayer: layer,
+      severity,
+      sourceIp,
+      repeatCount: 1
+    });
+  }
 
   if (state.logs.length > 100) state.logs.shift();
   renderLogs();
@@ -306,7 +315,7 @@ function updateRestoreAllButton() {
 
 function logEvent(type, text, details = "", detectionLayer = "", severity = "") {
   const timestamp = new Date().toLocaleTimeString();
-  state.logs.push({ timestamp, type, text, details, detectionLayer, severity });
+  state.logs.push({ timestamp, type, text, details, detectionLayer, severity, repeatCount: 1 });
   
   if (state.logs.length > 100) state.logs.shift();
   renderLogs();
@@ -369,15 +378,15 @@ function renderLogs() {
     if (log.severity) {
       let sevColor = "";
       if (log.severity === 'CRITICAL') {
-        sevColor = "bg-rose-950 text-rose-300 border border-rose-600";
+        sevColor = "bg-rose-950 text-rose-300 border border-rose-600 font-extrabold";
       } else if (log.severity === 'HIGH') {
-        sevColor = "bg-orange-950 text-orange-300 border border-orange-600";
+        sevColor = "bg-orange-950 text-orange-300 border border-orange-600 font-bold";
       } else if (log.severity === 'MEDIUM') {
-        sevColor = "bg-amber-950 text-amber-300 border border-amber-600";
+        sevColor = "bg-amber-950 text-amber-300 border border-amber-600 font-bold";
       } else {
-        sevColor = "bg-yellow-950 text-yellow-300 border border-yellow-600";
+        sevColor = "bg-yellow-950 text-yellow-300 border border-yellow-600 font-bold";
       }
-      badgesHtml += `<span class="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${sevColor} border">${log.severity}</span>`;
+      badgesHtml += `<span class="px-1.5 py-0.5 rounded text-[8px] uppercase ${sevColor} border">${log.severity}</span>`;
     }
 
     let actionHtml = "";
@@ -390,13 +399,17 @@ function renderLogs() {
       }
     }
 
+    const repeatBadge = (log.repeatCount && log.repeatCount > 1) 
+      ? `<span class="ml-1.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-rose-600 text-white border border-rose-400 shadow-sm animate-pulse">×${log.repeatCount}</span>` 
+      : "";
+
     line.innerHTML = `
       <span class="text-slate-500 shrink-0 select-none mr-2">${log.timestamp}</span>
       <span class="${colorClass} shrink-0 select-none mr-2">${prefix}</span>
       <div class="flex-1 min-w-0">
         <div class="flex items-center flex-wrap gap-1.5 justify-between">
           <div class="flex items-center flex-wrap gap-1.5">
-            ${log.attackName ? `<span class="text-rose-300 font-bold">${log.attackName}:</span>` : ""}
+            ${log.attackName ? `<span class="text-rose-300 font-bold flex items-center">${log.attackName}${repeatBadge}:</span>` : ""}
             <span class="text-slate-300 font-medium">${log.text}</span>
             ${badgesHtml}
           </div>
@@ -411,7 +424,7 @@ function renderLogs() {
   container.scrollTop = container.scrollHeight;
 }
 
-// Render Slave registers with Baseline comparison (Feature 5)
+// Render Slave registers matching Byte Inspector Table Discipline & Spacing (Feature 1 & 5)
 function renderRegisters() {
   for (let sId = 1; sId <= 3; sId++) {
     const container = document.getElementById(`slave-${sId}-regs`);
@@ -419,52 +432,73 @@ function renderRegisters() {
     container.innerHTML = "";
     const slave = state.slaves[sId];
     
+    // Header Table matching Byte Inspector discipline
+    const table = document.createElement('table');
+    table.className = "w-full text-[9.5px] font-mono border-collapse";
+    
+    let rowsHtml = "";
     for (let rAddr = 40001; rAddr <= 40008; rAddr++) {
       const reg = slave.registers[rAddr];
-      const div = document.createElement('div');
       
-      let flashClass = "text-slate-400";
+      let flashClass = "text-slate-300";
       if (slave.flashRegisters[rAddr] === 'write') {
-        flashClass = "bg-emerald-950/60 text-emerald-400 border border-emerald-800 font-bold rounded px-1 -mx-1";
+        flashClass = "bg-emerald-950/70 text-emerald-300 font-bold border-l-2 border-emerald-500";
       } else if (slave.flashRegisters[rAddr] === 'read') {
-        flashClass = "bg-cyan-950/60 text-cyan-400 border border-cyan-800 font-bold rounded px-1 -mx-1";
+        flashClass = "bg-cyan-950/70 text-cyan-300 font-bold border-l-2 border-cyan-500";
       } else if (slave.flashRegisters[rAddr] === 'anomaly') {
-        flashClass = "bg-rose-950/80 text-rose-400 border border-rose-800 font-bold rounded px-1 -mx-1 animate-pulse";
+        flashClass = "bg-rose-950/90 text-rose-300 font-bold border-l-2 border-rose-500 animate-pulse";
       }
       
       const hasBaseline = !!reg.baseline;
       const isOutOfRange = hasBaseline && (reg.val < reg.baseline.min || reg.val > reg.baseline.max);
       
-      let valDisplayHtml = "";
+      let valHtml = "";
+      let baselineBadgeHtml = "";
+
       if (isOutOfRange) {
-        valDisplayHtml = `
-          <div class="flex items-center gap-1 shrink-0">
-            <span class="text-[7.5px] text-rose-400/80 font-mono hidden sm:inline" title="Baseline: ${reg.baseline.label}">[${reg.baseline.label}]</span>
-            <span class="font-bold text-rose-300 bg-rose-950 px-1 py-0.2 rounded border border-rose-600 flex items-center gap-1 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.4)]">
-              ${reg.val}
-              <span class="text-[6.5px] bg-rose-600 text-white font-extrabold px-0.5 py-0.2 rounded uppercase">OUT OF RANGE</span>
-            </span>
-          </div>
+        valHtml = `<span class="font-extrabold text-rose-400">${reg.val}</span>`;
+        baselineBadgeHtml = `
+          <span class="px-1 py-0.2 rounded text-[7.5px] font-extrabold bg-rose-950 text-rose-300 border border-rose-600 animate-pulse inline-block shadow-[0_0_8px_rgba(244,63,94,0.4)]" title="Operational limit: ${reg.baseline.label}">
+            ${reg.val} [OUT OF RANGE]
+          </span>
         `;
       } else if (hasBaseline) {
-        valDisplayHtml = `
-          <div class="flex items-center gap-1 shrink-0">
-            <span class="text-[7.5px] text-slate-500 font-mono hidden sm:inline" title="Baseline: ${reg.baseline.label}">[${reg.baseline.label}]</span>
-            <span class="font-bold">${reg.val}</span>
-          </div>
+        valHtml = `<span class="font-bold text-slate-200">${reg.val}</span>`;
+        baselineBadgeHtml = `
+          <span class="px-1 py-0.2 rounded text-[7.5px] bg-slate-900 text-slate-400 border border-slate-800/80 inline-block" title="Expected Baseline: ${reg.baseline.label}">
+            ${reg.baseline.label}
+          </span>
         `;
       } else {
-        valDisplayHtml = `<span class="font-bold shrink-0">${reg.val}</span>`;
+        valHtml = `<span class="font-bold text-slate-200">${reg.val}</span>`;
+        baselineBadgeHtml = `<span class="text-[7.5px] text-slate-600">-</span>`;
       }
-      
-      div.className = `flex justify-between items-center transition-all duration-300 py-0.5 ${flashClass} ${isOutOfRange ? 'bg-rose-950/20' : ''}`;
-      div.innerHTML = `
-        <span class="opacity-85 text-[9px]" title="${reg.name}">${rAddr}</span>
-        <span class="text-[9px] opacity-60 overflow-hidden text-ellipsis whitespace-nowrap max-w-[48px]" title="${reg.name}">${reg.name}</span>
-        ${valDisplayHtml}
+
+      rowsHtml += `
+        <tr class="border-b border-slate-900/50 hover:bg-slate-900/40 transition-colors py-0.5 ${flashClass} ${isOutOfRange ? 'bg-rose-950/30' : ''}">
+          <td class="py-1 pl-1 text-slate-400 shrink-0 select-none" title="Register Address">${rAddr}</td>
+          <td class="py-1 px-1.5 text-slate-300 font-medium truncate max-w-[90px]" title="${reg.name}">${reg.name}</td>
+          <td class="py-1 px-1 text-right">${valHtml}</td>
+          <td class="py-1 pr-1 text-right shrink-0">${baselineBadgeHtml}</td>
+        </tr>
       `;
-      container.appendChild(div);
     }
+
+    table.innerHTML = `
+      <thead>
+        <tr class="text-[8px] text-slate-500 uppercase border-b border-slate-800/60 font-semibold select-none">
+          <th class="text-left py-0.5 pl-1 font-mono">Reg</th>
+          <th class="text-left py-0.5 px-1.5 font-mono">Parameter</th>
+          <th class="text-right py-0.5 px-1 font-mono">Val</th>
+          <th class="text-right py-0.5 pr-1 font-mono">Baseline</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    `;
+    
+    container.appendChild(table);
   }
 }
 
@@ -656,24 +690,26 @@ function drawTopology() {
   ctx.shadowBlur = 0;
   state.packets.forEach(p => {
     let currentPos = { x: 0, y: 0 };
+    // Helper to clamp progress t along segment to avoid overlapping node boxes (Wireshark / Lucidchart style)
+    const clampSeg = (tVal, minT = 0.16, maxT = 0.84) => Math.max(minT, Math.min(maxT, tVal));
     
     if (p.type === 'req') {
       if (p.isMitm) {
         // Spoofed packet injected directly at Switch -> travels to Slave
         const sl = state.slaves[p.unitId];
-        const t = p.progress;
+        const t = clampSeg(p.progress, 0.15, 0.85);
         currentPos.x = sw.x + (sl.x - sw.x) * t;
         currentPos.y = sw.y + (sl.y - sw.y) * t;
       } else {
         // Master or Attacker -> Switch -> Slave
         const startNode = (p.srcIp === atk.ip) ? atk : m;
         if (p.progress <= 0.4) {
-          const t = p.progress / 0.4;
+          const t = clampSeg(p.progress / 0.4, 0.18, 0.82);
           currentPos.x = startNode.x + (sw.x - startNode.x) * t;
           currentPos.y = startNode.y + (sw.y - startNode.y) * t;
         } else {
           const sl = state.slaves[p.unitId];
-          const t = (p.progress - 0.4) / 0.6;
+          const t = clampSeg((p.progress - 0.4) / 0.6, 0.18, 0.82);
           currentPos.x = sw.x + (sl.x - sw.x) * t;
           currentPos.y = sw.y + (sl.y - sw.y) * t;
         }
@@ -682,7 +718,7 @@ function drawTopology() {
       if (p.isMitmResponse) {
         // MITM response returns to Switch and dissolves/captures
         const sl = state.slaves[p.unitId];
-        const t = p.progress;
+        const t = clampSeg(p.progress, 0.15, 0.85);
         currentPos.x = sl.x + (sw.x - sl.x) * t;
         currentPos.y = sl.y + (sw.y - sl.y) * t;
       } else {
@@ -690,11 +726,11 @@ function drawTopology() {
         const sl = state.slaves[p.unitId];
         const destNode = (p.destIp === atk.ip) ? atk : m;
         if (p.progress <= 0.6) {
-          const t = p.progress / 0.6;
+          const t = clampSeg(p.progress / 0.6, 0.18, 0.82);
           currentPos.x = sl.x + (sw.x - sl.x) * t;
           currentPos.y = sl.y + (sw.y - sl.y) * t;
         } else {
-          const t = (p.progress - 0.6) / 0.4;
+          const t = clampSeg((p.progress - 0.6) / 0.4, 0.18, 0.82);
           currentPos.x = sw.x + (destNode.x - sw.x) * t;
           currentPos.y = sw.y + (destNode.y - sw.y) * t;
         }

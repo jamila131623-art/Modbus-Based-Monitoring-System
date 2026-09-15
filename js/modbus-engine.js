@@ -179,15 +179,19 @@ function updateFsm(step, alertText = "", isViolation = false) {
     const el = document.getElementById(`fsm-step-${s}`);
     if (el) {
       if (s === step) {
-        el.className = "px-2 py-1 rounded border border-cyan-400 bg-cyan-950 text-cyan-400 font-bold shadow-[0_0_8px_rgba(6,182,212,0.4)]";
+        el.className = "px-2.5 py-1.5 rounded-md border border-cyan-400 bg-cyan-950/90 text-cyan-300 font-extrabold fsm-stage-active z-10 shadow-[0_0_15px_rgba(6,182,212,0.6)] scale-105 transition-all duration-300";
+        const dot = el.querySelector('span');
+        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block";
       } else {
-        el.className = "px-2 py-1 rounded border border-slate-800 bg-slate-900/60 text-slate-500";
+        el.className = "px-2.5 py-1.5 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-300 z-10";
+        const dot = el.querySelector('span');
+        if (dot) dot.className = "w-1.5 h-1.5 rounded-full bg-slate-600 inline-block";
       }
     }
   });
 
   if (statusTag) {
-    statusTag.className = "text-[9px] font-mono text-cyan-500";
+    statusTag.className = "text-[9px] font-mono text-cyan-400 font-bold";
     statusTag.innerText = "Live Transaction Audit";
   }
 

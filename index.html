@@ -199,7 +199,7 @@
         </div>
       </div>
 
-      <!-- IDS Protocol State Machine (FSM) Panel -->
+      <!-- IDS Protocol State Machine (FSM) Panel (Pipeline Run Graph Visualizer) -->
       <div class="bg-brand-dark/40 rounded-xl border border-brand-border p-4 shadow-md flex flex-col gap-3">
         <div class="flex items-center justify-between border-b border-brand-border pb-2">
           <div class="flex items-center gap-2">
@@ -210,15 +210,42 @@
           </div>
           <span id="fsm-status-tag" class="text-[9px] font-mono text-cyan-500">Live Transaction Audit</span>
         </div>
-        <!-- FSM Strip -->
-        <div class="flex items-center justify-between text-[10px] font-mono bg-slate-950 p-2.5 rounded-lg border border-slate-900">
-          <div id="fsm-step-idle" class="px-2 py-1 rounded border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-200">IDLE</div>
-          <span class="text-slate-600 font-bold">→</span>
-          <div id="fsm-step-sent" class="px-2 py-1 rounded border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-200">REQ_SENT</div>
-          <span class="text-slate-600 font-bold">→</span>
-          <div id="fsm-step-await" class="px-2 py-1 rounded border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-200">AWAIT_RESP</div>
-          <span class="text-slate-600 font-bold">→</span>
-          <div id="fsm-step-done" class="px-2 py-1 rounded border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-200">COMPLETE</div>
+        <!-- Pipeline Flow Graph Strip -->
+        <div class="flex items-center justify-between text-[10px] font-mono bg-slate-950 p-2.5 rounded-lg border border-slate-900 relative overflow-hidden">
+          <div id="fsm-step-idle" class="px-2.5 py-1.5 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-300 flex items-center gap-1.5 z-10">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
+            <span>IDLE</span>
+          </div>
+          <div class="flex-1 px-1.5 flex items-center justify-center">
+            <svg class="w-full h-3" viewBox="0 0 40 10" preserveAspectRatio="none">
+              <line x1="0" y1="5" x2="32" y2="5" stroke="#334155" stroke-width="2" stroke-dasharray="3 3"/>
+              <polyline points="32,2 38,5 32,8" fill="none" stroke="#334155" stroke-width="2"/>
+            </svg>
+          </div>
+          <div id="fsm-step-sent" class="px-2.5 py-1.5 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-300 flex items-center gap-1.5 z-10">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
+            <span>REQ_SENT</span>
+          </div>
+          <div class="flex-1 px-1.5 flex items-center justify-center">
+            <svg class="w-full h-3" viewBox="0 0 40 10" preserveAspectRatio="none">
+              <line x1="0" y1="5" x2="32" y2="5" stroke="#334155" stroke-width="2" stroke-dasharray="3 3"/>
+              <polyline points="32,2 38,5 32,8" fill="none" stroke="#334155" stroke-width="2"/>
+            </svg>
+          </div>
+          <div id="fsm-step-await" class="px-2.5 py-1.5 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-300 flex items-center gap-1.5 z-10">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
+            <span>AWAIT_RESP</span>
+          </div>
+          <div class="flex-1 px-1.5 flex items-center justify-center">
+            <svg class="w-full h-3" viewBox="0 0 40 10" preserveAspectRatio="none">
+              <line x1="0" y1="5" x2="32" y2="5" stroke="#334155" stroke-width="2" stroke-dasharray="3 3"/>
+              <polyline points="32,2 38,5 32,8" fill="none" stroke="#334155" stroke-width="2"/>
+            </svg>
+          </div>
+          <div id="fsm-step-done" class="px-2.5 py-1.5 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 transition-all duration-300 flex items-center gap-1.5 z-10">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>
+            <span>COMPLETE</span>
+          </div>
         </div>
         <div id="fsm-alert" class="text-[10px] text-rose-400 bg-rose-950/20 border border-rose-900/50 p-2 rounded hidden font-mono animate-pulse"></div>
       </div>
@@ -271,28 +298,28 @@
           </div>
         </div>
 
-        <!-- Direct Attack Injections -->
+        <!-- Direct Attack Injections (PagerDuty Severity-Weighted Cards) -->
         <div class="border-t border-brand-border pt-3 flex flex-col gap-2">
           <div class="flex items-center justify-between">
             <span class="block text-[11px] font-bold font-mono text-slate-400 uppercase">Direct Attack Injections</span>
             <span class="text-[9px] font-mono text-rose-400 font-bold">1-CLICK AUDIT</span>
           </div>
           <div class="grid grid-cols-2 gap-2">
-            <button id="btn-attack-safety" onclick="triggerDirectAttack('safety')" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 hover:border-rose-500 text-rose-200 font-mono py-1.5 px-2.5 rounded text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
+            <button id="btn-attack-safety" onclick="triggerDirectAttack('safety')" class="border-l-4 border-l-rose-500 bg-rose-950/40 hover:bg-rose-900/60 border border-slate-800 hover:border-rose-500 text-rose-200 font-mono py-1.5 px-2.5 rounded-r text-[11px] transition duration-150 flex items-center justify-between group shadow-[0_0_10px_rgba(244,63,94,0.15)]">
               <span class="truncate">Critical Write Bypass</span>
-              <span class="text-[8px] px-1 py-0.5 bg-rose-900 text-rose-300 rounded font-bold ml-1 shrink-0">CRIT</span>
+              <span class="text-[8px] px-1.5 py-0.5 bg-rose-900 text-rose-300 rounded font-bold ml-1 shrink-0 border border-rose-600">CRIT</span>
             </button>
-            <button id="btn-attack-range" onclick="triggerDirectAttack('range')" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 hover:border-rose-500 text-rose-200 font-mono py-1.5 px-2.5 rounded text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
+            <button id="btn-attack-range" onclick="triggerDirectAttack('range')" class="border-l-4 border-l-orange-500 bg-orange-950/30 hover:bg-orange-900/50 border border-slate-800 hover:border-orange-500 text-orange-200 font-mono py-1.5 px-2.5 rounded-r text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
               <span class="truncate">Motor Overdrive</span>
-              <span class="text-[8px] px-1 py-0.5 bg-amber-900 text-amber-300 rounded font-bold ml-1 shrink-0">HIGH</span>
+              <span class="text-[8px] px-1.5 py-0.5 bg-orange-900 text-orange-300 rounded font-bold ml-1 shrink-0 border border-orange-600">HIGH</span>
             </button>
-            <button id="btn-attack-func" onclick="triggerDirectAttack('func')" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 hover:border-rose-500 text-rose-200 font-mono py-1.5 px-2.5 rounded text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
+            <button id="btn-attack-func" onclick="triggerDirectAttack('func')" class="border-l-4 border-l-amber-500 bg-amber-950/25 hover:bg-amber-900/40 border border-slate-800 hover:border-amber-500 text-amber-200 font-mono py-1.5 px-2.5 rounded-r text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
               <span class="truncate">Illegal Func Code</span>
-              <span class="text-[8px] px-1 py-0.5 bg-yellow-900 text-yellow-300 rounded font-bold ml-1 shrink-0">MED</span>
+              <span class="text-[8px] px-1.5 py-0.5 bg-amber-900 text-amber-300 rounded font-bold ml-1 shrink-0 border border-amber-600">MED</span>
             </button>
-            <button id="btn-attack-ip" onclick="triggerDirectAttack('ip')" class="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 hover:border-rose-500 text-rose-200 font-mono py-1.5 px-2.5 rounded text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
+            <button id="btn-attack-ip" onclick="triggerDirectAttack('ip')" class="border-l-4 border-l-amber-500 bg-amber-950/25 hover:bg-amber-900/40 border border-slate-800 hover:border-amber-500 text-amber-200 font-mono py-1.5 px-2.5 rounded-r text-[11px] transition duration-150 flex items-center justify-between group shadow-sm">
               <span class="truncate">Rogue IP Read</span>
-              <span class="text-[8px] px-1 py-0.5 bg-yellow-900 text-yellow-300 rounded font-bold ml-1 shrink-0">MED</span>
+              <span class="text-[8px] px-1.5 py-0.5 bg-amber-900 text-amber-300 rounded font-bold ml-1 shrink-0 border border-amber-600">MED</span>
             </button>
           </div>
         </div>
