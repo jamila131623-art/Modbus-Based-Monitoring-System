@@ -2,13 +2,13 @@
 
 An interactive, browser-based OT/ICS network security visualizer built for teaching, demonstrating, and evaluating Modbus TCP industrial protocol communication and intrusion detection system (IDS) anomaly detection.
 
-[![Launch Live Prototype](https://img.shields.io/badge/🚀%20LAUNCH-LIVE%20PROTOTYPE-emerald?style=for-the-badge&logo=googlechrome)](https://htmlpreview.github.io/?https://github.com/jamila131623-art/Modbus-Based-Monitoring-System/blob/main/index.html)
-[![GitHub Pages](https://img.shields.io/badge/🌐%20GITHUB%20PAGES-LIVE%20SITE-cyan?style=for-the-badge&logo=github)](https://jamila131623-art.github.io/Modbus-Based-Monitoring-System/)
+[![Launch Live Prototype](https://img.shields.io/badge/🚀%20LAUNCH-LIVE%20PROTOTYPE-emerald?style=for-the-badge&logo=googlechrome)](https://jamila131623-art.github.io/Modbus-Based-Monitoring-System/)
+[![GitHub Pages](https://img.shields.io/badge/🌐%20GITHUB%20PAGES-OFFICIAL%20SITE-cyan?style=for-the-badge&logo=github)](https://jamila131623-art.github.io/Modbus-Based-Monitoring-System/)
 [![Zero Build Step](https://img.shields.io/badge/Zero%20Build-HTML5%2FJS-blue?style=for-the-badge)](file:///c:/Users/User/Desktop/modbus/index.html)
 
 ---
 
-### 🌐 [Click Here to Open Live Prototype in Browser](https://htmlpreview.github.io/?https://github.com/jamila131623-art/Modbus-Based-Monitoring-System/blob/main/index.html)
+### 🌐 [Click Here to Open Live Prototype in Browser](https://jamila131623-art.github.io/Modbus-Based-Monitoring-System/)
 
 ---
 
